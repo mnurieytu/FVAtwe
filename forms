@@ -1,0 +1,113 @@
+# myapp/models.py
+from django.db import models
+from django.contrib.auth.models import User
+
+class Project(models.Model):
+    name = models.CharField(max_length=100)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.name
+
+class Task(models.Model):
+    title = models.CharField(max_length=100)
+    description = models.TextField()
+    deadline = models.DateField()
+    completed = models.BooleanField(default=False)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.title
+
+
+# myapp/views.py
+from django.shortcuts import render, redirect
+from django.contrib.auth.decorators import login_required
+from .models import Project, Task
+from .forms import TaskForm
+
+@login_required
+def task_list(request):
+    tasks = Task.objects.filter(project__user=request.user)
+    return render(request, 'myapp/task_list.html', {'tasks': tasks})
+
+@login_required
+def create_task(request):
+    if request.method == 'POST':
+        form = TaskForm(request.POST)
+        if form.is_valid():
+            task = form.save(commit=False)
+            task.project.user = request.user
+            task.project.save()
+            task.save()
+            return redirect('task_list')
+    else:
+        form = TaskForm()
+    return render(request, 'myapp/create_task.html', {'form': form})
+
+@login_required
+def update_task(request, task_id):
+    task = Task.objects.get(id=task_id)
+    if request.method == 'POST':
+        form = TaskForm(request.POST, instance=task)
+        if form.is_valid():
+            form.save()
+            return redirect('task_list')
+    else:
+        form = TaskForm(instance=task)
+    return render(request, 'myapp/update_task.html', {'form': form, 'task': task})
+
+@login_required
+def complete_task(request, task_id):
+    task = Task.objects.get(id=task_id)
+    task.completed = True
+    task.save()
+    return redirect('task_list')
+
+@login_required
+def project_list(request):
+    projects = Project.objects.filter(user=request.user)
+    return render(request, 'myapp/project_list.html', {'projects': projects})
+
+@login_required
+def create_project(request):
+    if request.method == 'POST':
+        name = request.POST['name']
+        project = Project(name=name, user=request.user)
+        project.save()
+        return redirect('project_list')
+    return render(request, 'myapp/create_project.html')
+
+@login_required
+def delete_project(request, project_id):
+    project = Project.objects.get(id=project_id)
+    project.delete()
+    return redirect('project_list')
+
+
+# myapp/forms.py
+from django import forms
+from .models import Task
+
+class TaskForm(forms.ModelForm):
+    class Meta:
+        model = Task
+        fields = ('title', 'description', 'deadline', 'project')
+
+
+# urls.py
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('tasks/', views.task_list, name='task_list'),
+    path('tasks/create/', views.create_task, name='create_task'),
+    path('tasks/update/<int:task_id>/', views.update_task, name='update_task'),
+    path('tasks/complete/<int:task_id>/', views.complete_task, name='complete_task'),
+    path('projects/', views.project_list, name='project_list'),
+    path('projects/create/', views.create_project, name='create_project'),
+    path('projects/delete/<int:project_id>/', views.delete_project, name='delete_project'),
+]
+
+
+#
